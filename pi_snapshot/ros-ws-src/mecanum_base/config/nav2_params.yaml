@@ -1,0 +1,418 @@
+# Nav2 สำหรับฐาน mecanum สองไดรเวอร์ (ใช้งานเหมือน diff-drive เพราะ max_vy = 0)
+#   ros2 launch mecanum_base navigation.launch.py
+#
+# ต้นทาง map / map->odom มาจาก slam_toolbox, odom->base_link มาจาก EKF (ไม่ใช้ AMCL/map_server)
+# เส้นทาง cmd_vel:
+#   controller_server / behavior_server -> cmd_vel_nav -> velocity_smoother -> cmd_vel_smoothed
+#   -> collision_monitor -> cmd_vel -> mecanum_base_node
+#
+# ขนาดหุ่น (ผู้ใช้วัด 2026-09-17 รวมล้อ): ยาว 51 cm (ฐาน 48 + ล้อหน้ายื่น 3) กว้าง 48.8 cm (ฐาน 44.8 + ล้อยื่นข้างละ 2)
+# ถือว่า base_link อยู่กลางฐาน -> หน้า +0.27 หลัง -0.24 ซ้าย/ขวา +-0.244
+#
+# lidar (2026-09-23): driver ส่งถึง 0.12 m -> scan_resampler แยก /scan_nav ที่ตัดเฉพาะจุดในกรอบตัวหุ่น (+3 cm)
+#   costmap และ collision_monitor ใช้ /scan_nav (เดิม /scan_fixed ตัดทุกอย่างที่ใกล้กว่า 0.35 m = บอด ~10 cm รอบหุ่น)
+#   SLAM/rf2o ยังได้ข้อมูลตัดที่ 0.35 m แบบเดิม
+# !! ด้านหลังหุ่นยังมีเงาที่ตัวหุ่นบัง (แบต/Pi/ปลั๊กพ่วงอยู่ระดับเดียวกับ lidar) -> ถอยหลังช้า ๆ ระยะสั้นเท่านั้น !!
+
+bt_navigator:
+  ros__parameters:
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odometry/filtered
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    wait_for_service_timeout: 1000
+    action_server_result_timeout: 900.0
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+    # default_nav_to_pose_bt_xml ตั้งใน launch (ต้องเป็น path เต็ม) -> config/nav_to_pose_safe.xml
+    error_code_names: ["compute_path_error_code", "follow_path_error_code"]
+
+controller_server:
+  ros__parameters:
+    controller_frequency: 10.0          # Pi 5 -- 10 Hz พอสำหรับความเร็วต่ำ
+    costmap_update_timeout: 0.30
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5       # ไม่ใช้แกน y
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    odom_topic: /odometry/filtered
+    progress_checker_plugins: ["progress_checker"]
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+    use_realtime_priority: false
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.5
+      movement_time_allowance: 20.0     # หันกลับ 180 องศาที่ 0.3 rad/s ใช้ ~10 s
+
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: true
+      xy_goal_tolerance: 0.08           # 23 ก.ย.: 0.15 -> 0.08 เทส 1 m หยุดสั้น 11 cm เพราะ 0.15
+      yaw_goal_tolerance: 0.10          # ~6 องศา -- 23 ก.ย.: 0.25 -> 0.10 หลัง EKF ใช้ yaw จาก rf2o ตอนหมุนอยู่กับที่ (คลาด ~1°)
+
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.15          # m/s -- 2026-09-24 ผู้ใช้ขอเร็วขึ้น 0.10 -> 0.15 (ฐานรับได้ 0.3)
+      lookahead_dist: 0.3   # 8 ต.ค. ผู้ใช้: 0.5 -> 0.3 ตามเส้นชิดขึ้น ไม่ตัดโค้ง
+      min_lookahead_dist: 0.2
+      max_lookahead_dist: 0.8
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.45   # 2026-09-24 0.3 -> 0.45 (ฐาน max_wz 0.5)
+      transform_tolerance: 0.2
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.4
+      use_collision_detection: false   # 7 ต.ค. ผู้ใช้สั่งปิด ให้ collision monitor เบรกแทน (ทางแคบ RPP ตัดสินว่าชนเกินจริง)
+      max_allowed_time_to_collision_up_to_carrot: 1.5
+      # 24 ก.ย. false: เดิมโค้งแคบแล้วลดความเร็วเดินหน้า -> ล้อด้านในหยุด อีกข้างหมุน (ลูกกลิ้งฝั่งหยุดไม่ลื่น สะดุด)
+      use_regulated_linear_velocity_scaling: false
+      use_cost_regulated_linear_velocity_scaling: false
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.05
+      use_fixed_curvature_lookahead: false
+      curvature_lookahead_dist: 0.6
+      use_rotate_to_heading: true       # หันหาเส้นทางก่อนออกตัว (หมุนอยู่กับที่)
+      # 24 ก.ย. 0.785 -> 0.35: เลี้ยวเกิน 20° ให้หมุนอยู่กับที่ (ล้อสองฝั่งหมุนสวนกัน) แทนเลี้ยวโค้งแบบล้อข้างเดียว
+      rotate_to_heading_min_angle: 0.6   # 24 ก.ย. ช่วงเย็น 0.35 -> 0.6 (35°) หยุดหมุนบ่อยเกินตอนวิ่งตามแมพ = ช้า
+      allow_reversing: false
+      max_angular_accel: 0.6            # 24 ก.ย. 1.0 -> 0.6 ตรงกับ velocity_smoother
+      max_robot_pose_search_dist: 10.0
+      interpolate_curvature_after_goal: false
+      cost_scaling_dist: 0.3
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 3.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      footprint: "[[0.27, 0.244], [0.27, -0.244], [-0.24, -0.244], [-0.24, 0.244]]"
+      footprint_padding: 0.01
+      plugins: ["obstacle_layer", "camera_layer", "stuck_layer", "keepout_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan_nav      # เห็นใกล้ถึง 0.12 m ตัดเฉพาะจุดบนตัวหุ่น (scan_resampler 2026-09-23)
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          max_obstacle_height: 2.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+      # ของที่กล้อง+YOLO เห็น (object_locator -> /object_cloud) เช่นเก้าอี้ที่ lidar ลอดใต้เบาะ (2026-09-23)
+      # lidar ลบไม่ได้ (lidar มองทะลุตรงนั้นอยู่แล้ว) -- ลบด้วยลำแสงของกล้องเอง (source clear) หรือตอนล้าง costmap
+      camera_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true    # ลบใต้ตัวหุ่น -- ถ้าประมาณตำแหน่งพลาดมาทับหุ่น หุ่นจะไม่ติดอยู่กับที่
+        observation_sources: objects clear
+        objects:
+          topic: /object_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.0
+        # ลำแสงทั่วมุมกล้อง: ลบเครื่องหมายเก่าในส่วนที่กล้องเห็นอยู่ (ของย้ายแล้ว) -- นอกมุมกล้องยังจำไว้
+        clear:
+          topic: /object_clear_cloud
+          data_type: "PointCloud2"
+          marking: false
+          clearing: true
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.5
+          raytrace_min_range: 0.0
+      # จุดที่ล้อเคยติด (สายไฟ/ของเตี้ยที่ lidar ไม่เห็น) จาก waypoint_manager -- 2026-09-24
+      # แยกจาก camera_layer เพราะลำแสงล้างของกล้องจะลบทิ้ง · ไม่มี clearing: จำไว้จนจบรอบสำรวจ
+      stuck_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        # true: ถอยไม่พ้นแล้วเส้นทับตัวหุ่น -> ลบใต้ตัว ไม่งั้นติดอยู่กับที่ (เจอ 24 ก.ย. 15:18)
+        footprint_clearing_enabled: true
+        observation_sources: stuck
+        stuck:
+          topic: /stuck_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 6.0
+          obstacle_min_range: 0.0
+      # เขตห้ามเข้าที่ผู้ใช้คลิก 4 มุม (keepout_zones) -- ไม่ลบใต้ตัวหุ่น ถ้าวางเขตทับตัวหุ่น ส่วนใต้ตัวถูกลบ หุ่นยังออกมาได้
+      keepout_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true
+        observation_sources: keepout
+        keepout:
+          topic: /keepout_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 6.0        # 3.0 -> 6.0 (2026-09-17) แถบเทารอบสิ่งกีดขวางแคบลง
+        inflation_radius: 0.40          # มากกว่ารัศมีวงล้อมหุ่น (มุม 0.28,0.254 = 0.378 m)
+      always_send_full_costmap: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      resolution: 0.05
+      track_unknown_space: true
+      footprint: "[[0.27, 0.244], [0.27, -0.244], [-0.24, -0.244], [-0.24, 0.244]]"
+      footprint_padding: 0.01
+      # denoise อยู่หลัง static แต่ก่อน obstacle -> กรองจุดรบกวนในแมพ SLAM เท่านั้น
+      # สิ่งที่ lidar เห็นสด ๆ (obstacle_layer) ไม่ถูกกรอง ขาเก้าอี้/ขาโต๊ะเห็นเป็น 1-2 จุดเหมือนกัน
+      plugins: ["static_layer", "denoise_layer", "obstacle_layer", "camera_layer", "stuck_layer", "keepout_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+      # แมพ 2026-09-17: occupied 912 จุด 312 กลุ่ม (เดี่ยว 198, คู่ 43) ผนังจริงเป็นกลุ่ม 10-72 จุด
+      # จำลองพื้นที่ห้ามเข้า: ไม่กรอง 63% -> กรอง <3 จุด 40% -> <5 จุด 31% -> <8 จุด 23%
+      # 5 -> 8 (2026-09-17 วิ่งจริงครั้งแรก): จุดเริ่มของหุ่นอยู่ในโซนห้ามเข้าเพราะกลุ่มจุด 6 จุด
+      # ห่างกึ่งกลางหุ่น 23 cm (อยู่ใต้มุมหลังขวาของตัวหุ่นเอง = จุดหลอก) NavFn วางเส้นทางจากจุดห้ามเข้าไม่ได้
+      denoise_layer:
+        plugin: "nav2_costmap_2d::DenoiseLayer"
+        enabled: true
+        minimal_group_size: 8
+        group_connectivity_type: 8
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan_nav      # เห็นใกล้ถึง 0.12 m ตัดเฉพาะจุดบนตัวหุ่น (scan_resampler 2026-09-23)
+          data_type: "LaserScan"
+          marking: true
+          clearing: true
+          max_obstacle_height: 2.0
+          obstacle_max_range: 4.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 5.0
+          raytrace_min_range: 0.0
+      # ของที่กล้อง+YOLO เห็น (object_locator -> /object_cloud) เช่นเก้าอี้ที่ lidar ลอดใต้เบาะ (2026-09-23)
+      # lidar ลบไม่ได้ (lidar มองทะลุตรงนั้นอยู่แล้ว) -- ลบด้วยลำแสงของกล้องเอง (source clear) หรือตอนล้าง costmap
+      camera_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: false   # 6 ต.ค. ผู้ใช้: กล้องมีหน้าที่แค่กันชน (local) การสำรวจ/วางเส้นทางใช้ lidar
+        footprint_clearing_enabled: true    # ลบใต้ตัวหุ่น -- ถ้าประมาณตำแหน่งพลาดมาทับหุ่น หุ่นจะไม่ติดอยู่กับที่
+        observation_sources: objects clear
+        objects:
+          topic: /object_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.0
+        # ลำแสงทั่วมุมกล้อง: ลบเครื่องหมายเก่าในส่วนที่กล้องเห็นอยู่ (ของย้ายแล้ว) -- นอกมุมกล้องยังจำไว้
+        clear:
+          topic: /object_clear_cloud
+          data_type: "PointCloud2"
+          marking: false
+          clearing: true
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.5
+          raytrace_min_range: 0.0
+      # จุดที่ล้อเคยติด (สายไฟ/ของเตี้ยที่ lidar ไม่เห็น) จาก waypoint_manager -- 2026-09-24
+      # แยกจาก camera_layer เพราะลำแสงล้างของกล้องจะลบทิ้ง · ไม่มี clearing: จำไว้จนจบรอบสำรวจ
+      stuck_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        # true: ถอยไม่พ้นแล้วเส้นทับตัวหุ่น -> ลบใต้ตัว ไม่งั้นติดอยู่กับที่ (เจอ 24 ก.ย. 15:18)
+        footprint_clearing_enabled: true
+        observation_sources: stuck
+        stuck:
+          topic: /stuck_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 6.0
+          obstacle_min_range: 0.0
+      # เขตห้ามเข้าที่ผู้ใช้คลิก 4 มุม (keepout_zones) -- ไม่ลบใต้ตัวหุ่น ถ้าวางเขตทับตัวหุ่น ส่วนใต้ตัวถูกลบ หุ่นยังออกมาได้
+      keepout_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        footprint_clearing_enabled: true
+        observation_sources: keepout
+        keepout:
+          topic: /keepout_cloud
+          data_type: "PointCloud2"
+          marking: true
+          clearing: false
+          min_obstacle_height: 0.0
+          max_obstacle_height: 2.0
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 6.0
+        inflation_radius: 0.40
+      always_send_full_costmap: true
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 1.0
+    costmap_update_timeout: 1.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.3
+      use_astar: false
+      allow_unknown: true
+
+behavior_server:
+  ros__parameters:
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    # BT ที่ใช้ (nav_to_pose_safe.xml) เรียก backup (ถอย 15 cm ตอนติด ตั้งแต่ 2026-09-23) + wait -- spin ไม่ใช้
+    # backup เช็คการชนด้วย local costmap + footprint มองล่วงหน้า simulate_ahead_time
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors::Spin"
+    backup:
+      plugin: "nav2_behaviors::BackUp"
+    wait:
+      plugin: "nav2_behaviors::Wait"
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_link
+    transform_tolerance: 0.2
+    simulate_ahead_time: 2.0
+    max_rotational_vel: 0.4
+    min_rotational_vel: 0.2
+    rotational_acc_lim: 1.0
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: "OPEN_LOOP"
+    # [vx, vy, wz] -- เพดานต่ำกว่า mecanum_base.yaml (0.3 / 0.0 / 0.5) ไว้ก่อน
+    # 2026-09-24 ผู้ใช้ขอเร็วขึ้น: 0.15/0.4 -> 0.20/0.5 (wz ห้ามเกิน max_wz 0.5 ของฐาน)
+    max_velocity: [0.20, 0.0, 0.5]
+    min_velocity: [-0.20, 0.0, -0.5]
+    # 24 ก.ย. ผู้ใช้: เลี้ยวเนียนขึ้นแต่สะดุดตอนหยุดเลี้ยว -> ลดอัตราเร่ง/หน่วงหมุน (หยุดหมุนจาก 0.45 rad/s ใช้ ~0.75 s แทน 0.45 s)
+    max_accel: [0.25, 0.0, 0.6]
+    max_decel: [-0.3, 0.0, -0.6]
+    odom_topic: "/odometry/filtered"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+collision_monitor:
+  ros__parameters:
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel"
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: true
+    stop_pub_timeout: 2.0
+    # หยุดทันทีถ้ามีจุด lidar >= 4 จุดในกรอบ -- กรอบเปลี่ยนตามคำสั่งความเร็ว (2026-09-23 เดิมมีแค่กรอบหน้า)
+    #   เดินหน้า: หน้าหุ่นไม่เกิน 23 cm จากขอบหน้า   ถอยหลัง: ไม่เกิน 21 cm จากขอบหลัง
+    #   หมุนอยู่กับที่: รอบตัวหุ่น 7 cm (จุดบนตัวหุ่น +3 cm ถูกตัดใน /scan_nav แล้ว) -- หุ่นหมุนไม่รอบกลาง กวาดข้างได้ 30 cm
+    # ใช้ /scan_nav: เห็นใกล้ถึง 0.12 m จาก lidar (lidar อยู่ x=0.17 -> กลางหน้าหุ่นยังบอดราว 2 cm จากขอบ)
+    # 24 ก.ย. ผู้ใช้: เพิ่มโซนชะลอ -- ของเข้ากรอบนี้ลดความเร็วเหลือครึ่ง ก่อนถึงกรอบหยุด (เดิมหยุดกึก = สะดุด)
+    polygons: ["SlowdownZone", "VelocityPolygonStop"]
+    SlowdownZone:
+      type: "polygon"
+      action_type: "slowdown"
+      slowdown_ratio: 0.5
+      min_points: 4
+      visualize: true
+      enabled: true
+      polygon_pub_topic: "slowdown_zone"
+      # เฉพาะด้านหน้า: 30-67 cm จากกลางหุ่น กว้างเท่าตัว -- 24 ก.ย. เดิมคลุมข้างด้วย ปลั๊กพ่วง/สายข้างตัว (27-30 cm)
+      # อยู่ในกรอบตลอด หุ่นเลยวิ่งครึ่งความเร็วทั้งรอบ (ผู้ใช้: วิ่งตามแมพช้า ทำอะไรก็ช้า)
+      points: "[[0.67, 0.28], [0.67, -0.28], [0.30, -0.28], [0.30, 0.28]]"
+    VelocityPolygonStop:
+      type: "velocity_polygon"
+      action_type: "stop"
+      min_points: 4
+      visualize: true
+      enabled: true
+      polygon_pub_topic: "velocity_polygon_stop"
+      holonomic: false
+      # เลือกกรอบแรกที่ความเร็วเข้าเงื่อนไข -- หมุนอยู่กับที่ต้องมาก่อน
+      velocity_polygons: ["rotation", "forward", "backward", "stopped"]
+      rotation:
+        points: "[[0.30, 0.274], [0.30, -0.274], [-0.27, -0.274], [-0.27, 0.274]]"   # 7 ต.ค. ผู้ใช้สั่งลดจาก 7 cm เหลือ 3 cm
+        linear_min: -0.02
+        linear_max: 0.02
+        theta_min: -1.0
+        theta_max: 1.0
+      forward:
+        points: "[[0.50, 0.28], [0.50, -0.28], [0.27, -0.28], [0.27, 0.28]]"
+        linear_min: 0.0
+        linear_max: 1.0
+        theta_min: -1.0
+        theta_max: 1.0
+      backward:
+        points: "[[-0.24, 0.28], [-0.24, -0.28], [-0.45, -0.28], [-0.45, 0.28]]"
+        linear_min: -1.0
+        linear_max: 0.0
+        theta_min: -1.0
+        theta_max: 1.0
+      stopped:
+        points: "[[0.34, 0.314], [0.34, -0.314], [-0.31, -0.314], [-0.31, 0.314]]"
+        linear_min: -1.0
+        linear_max: 1.0
+        theta_min: -1.0
+        theta_max: 1.0
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan_nav"
+      enabled: true
+
+lifecycle_manager_navigation:
+  ros__parameters:
+    autostart: true
+    bond_timeout: 10.0                  # Pi สะดุดได้ถึง ~0.3 s ช่วงโหลดหนัก เผื่อไว้
+    node_names:
+      - controller_server
+      - planner_server
+      - behavior_server
+      - velocity_smoother
+      - collision_monitor
+      - bt_navigator

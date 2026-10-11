@@ -1,0 +1,10 @@
+{
+ "mission_speed": 0.4,
+ "turn": {
+  "mode": "smooth",
+  "corner_deg": 60.0,
+  "rot_vmax": 0.5,
+  "rot_accel": 0.8,
+  "arc_r": 0.35
+ }
+}

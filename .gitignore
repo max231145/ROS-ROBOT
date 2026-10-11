@@ -1,0 +1,11 @@
+# build / cache
+.pio/
+build/
+install/
+log/
+__pycache__/
+*.pyc
+# ไฟล์สำรองตอนแก้
+*.bak*
+*.orig
+.git_orig/

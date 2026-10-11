@@ -1,0 +1,10 @@
+<library path="stepper_hardware">
+  <class name="stepper_hardware/StepperSystem"
+         type="stepper_hardware::StepperSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      คุยกับบอร์ด ESP32 ที่รันเฟิร์มแวร์ esp32_dm556_stepper ผ่าน serial
+      แปลง rad/m ของ ROS เป็น step ให้ไดรเวอร์ DM556 สูงสุด 4 แกน
+    </description>
+  </class>
+</library>

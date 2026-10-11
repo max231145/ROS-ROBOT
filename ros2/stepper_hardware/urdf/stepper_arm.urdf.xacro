@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<!--
+  URDF ตัวอย่างสำหรับทดสอบให้ระบบเดินได้ครบวง
+  รูปทรงเป็นแท่งสี่เหลี่ยมล้วน ไม่ใช่ขนาดจริงของเครื่อง
+  เอาไปใช้จริงต้องแทนที่ด้วย URDF ของกลไกคุณเอง
+  แต่ให้คง <xacro:stepper_system> กับชื่อ joint ไว้ให้ตรงกัน
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="stepper_arm">
+
+  <xacro:arg name="port" default="/dev/ttyUSB0"/>
+  <xacro:arg name="baud" default="115200"/>
+
+  <xacro:include filename="$(find stepper_hardware)/urdf/stepper_arm.ros2_control.xacro"/>
+  <xacro:stepper_system port="$(arg port)" baud="$(arg baud)"/>
+
+  <xacro:macro name="box_link" params="name x y z">
+    <link name="${name}">
+      <visual>
+        <origin xyz="0 0 ${z/2}"/>
+        <geometry><box size="${x} ${y} ${z}"/></geometry>
+        <material name="grey"><color rgba="0.6 0.6 0.6 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${z/2}"/>
+        <geometry><box size="${x} ${y} ${z}"/></geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 ${z/2}"/>
+        <mass value="1.0"/>
+        <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <link name="world"/>
+  <xacro:box_link name="base_link"     x="0.20" y="0.20" z="0.10"/>
+  <xacro:box_link name="shoulder_link" x="0.08" y="0.08" z="0.30"/>
+  <xacro:box_link name="elbow_link"    x="0.06" y="0.06" z="0.25"/>
+  <xacro:box_link name="lift_link"     x="0.05" y="0.05" z="0.10"/>
+
+  <joint name="world_to_base" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+  </joint>
+
+  <joint name="joint_base" type="revolute">
+    <parent link="base_link"/>
+    <child link="shoulder_link"/>
+    <origin xyz="0 0 0.10"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.5707963" upper="1.5707963" effort="50" velocity="1.5"/>
+  </joint>
+
+  <joint name="joint_shoulder" type="revolute">
+    <parent link="shoulder_link"/>
+    <child link="elbow_link"/>
+    <origin xyz="0 0 0.30"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0.0" upper="2.0" effort="50" velocity="1.0"/>
+  </joint>
+
+  <joint name="joint_elbow" type="revolute">
+    <parent link="elbow_link"/>
+    <child link="lift_link"/>
+    <origin xyz="0 0 0.25"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.0" upper="0.0" effort="50" velocity="1.0"/>
+  </joint>
+
+  <link name="tool_link"/>
+  <joint name="joint_lift" type="prismatic">
+    <parent link="lift_link"/>
+    <child link="tool_link"/>
+    <origin xyz="0 0 0.10"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.25" effort="100" velocity="0.03"/>
+  </joint>
+
+</robot>

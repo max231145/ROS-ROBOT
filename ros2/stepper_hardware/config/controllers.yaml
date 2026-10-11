@@ -1,0 +1,38 @@
+controller_manager:
+  ros__parameters:
+    # ความถี่ที่ read() / write() ถูกเรียก
+    # ที่ 115200 baud อย่าเกิน 50 Hz -- คำสั่ง T ขาไป + status ขากลับกินราว 5.5 kB/s
+    # จาก 11.5 kB/s ที่มี ถ้าจะดันเป็น 100-200 Hz ต้องแก้ SERIAL_BAUD ในไฟล์ .ino
+    # เป็น 921600 แล้วตั้ง baud ใน URDF ให้ตรงกันด้วย
+    update_rate: 50
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - joint_base
+      - joint_shoulder
+      - joint_elbow
+      - joint_lift
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_partial_joints_goal: false
+
+    # ค่าคลาดระหว่างทางของสเต็ปเปอร์แบบไม่มี encoder จะอยู่ราวครึ่งหนึ่งของระยะที่วิ่ง
+    # ได้ในหนึ่งคาบควบคุม (ที่ 50 Hz + 1 rad/s ราว 0.01 rad) ตั้ง trajectory ให้เผื่อกว่านั้น
+    # ถ้าตั้งแน่นเกินไป goal จะถูกยกเลิกกลางทางทั้งที่กลไกยังวิ่งดีอยู่
+    constraints:
+      stopped_velocity_tolerance: 0.02
+      goal_time: 1.0
+      joint_base:     { trajectory: 0.10, goal: 0.02 }
+      joint_shoulder: { trajectory: 0.10, goal: 0.02 }
+      joint_elbow:    { trajectory: 0.10, goal: 0.02 }
+      joint_lift:     { trajectory: 0.01, goal: 0.002 }

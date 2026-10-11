@@ -1,0 +1,80 @@
+/**:
+  ros__parameters:
+    port: /dev/ttyUSB0        # ถ้ามี ESP32 หลายตัว ให้ทำ udev rule แล้วใช้ /dev/esp32_stepper
+    baud: 115200              # ต้องตรงกับ SERIAL_BAUD ในไฟล์ .ino
+    status_hz: 20             # ความถี่ที่บอร์ดส่งตำแหน่งกลับมา = ความถี่ /joint_states
+    frame_id: ''
+    auto_enable: false        # true = จ่ายไฟมอเตอร์ทันทีที่ node ขึ้น (ระวังตอนทดสอบ)
+
+    # ------------------------------------------------------------------
+    # การคำนวณหน่วย:
+    #   step ต่อ 1 รอบด้านออก = steps_per_rev * microsteps * gear_ratio
+    #   steps_per_unit        = step ต่อรอบด้านออก / units_per_rev
+    #
+    #   steps_per_rev : สเปกมอเตอร์ 1.8 องศา = 200
+    #   microsteps    : ตั้งที่ DIP SW1-SW3 ของ DM556 ต้องกรอกให้ตรงของจริง
+    #   gear_ratio    : มอเตอร์หมุนกี่รอบ ต่อด้านออก 1 รอบ (ไม่มีเกียร์ = 1.0)
+    #   units_per_rev : แกนหมุน  = 6.283185307 (rad ต่อรอบ)
+    #                   แกนเลื่อน = ระยะ lead ของสกรูหน่วยเมตร เช่น 0.005 = 5 mm/รอบ
+    # ------------------------------------------------------------------
+
+    axis0:
+      name: joint_base
+      enabled: true
+      steps_per_rev: 200
+      microsteps: 8
+      gear_ratio: 10.0
+      units_per_rev: 6.283185307
+      invert: false
+      offset: -1.5707963        # ค่า joint ตรงจุดที่ลิมิตสวิตช์ทำงาน (step 0)
+      max_vel: 1.5              # rad/s
+      max_accel: 3.0            # rad/s^2
+      limit_lo: -1.5707963      # soft limit; ตั้ง lo == hi เพื่อปิด
+      limit_hi: 1.5707963
+      home_dir: -1              # ทิศที่วิ่งไปหาลิมิตสวิตช์
+
+    axis1:
+      name: joint_shoulder
+      enabled: true
+      steps_per_rev: 200
+      microsteps: 8
+      gear_ratio: 20.0
+      units_per_rev: 6.283185307
+      invert: false
+      offset: 0.0
+      max_vel: 1.0
+      max_accel: 2.0
+      limit_lo: 0.0
+      limit_hi: 2.0
+      home_dir: -1
+
+    axis2:
+      name: joint_elbow
+      enabled: true
+      steps_per_rev: 200
+      microsteps: 8
+      gear_ratio: 20.0
+      units_per_rev: 6.283185307
+      invert: true
+      offset: 0.0
+      max_vel: 1.0
+      max_accel: 2.0
+      limit_lo: -2.0
+      limit_hi: 0.0
+      home_dir: -1
+
+    axis3:
+      # ตัวอย่างแกนเลื่อนด้วยสกรู lead 5 mm: units เป็นเมตร
+      name: joint_lift
+      enabled: true
+      steps_per_rev: 200
+      microsteps: 8
+      gear_ratio: 1.0
+      units_per_rev: 0.005
+      invert: false
+      offset: 0.0
+      max_vel: 0.03             # m/s
+      max_accel: 0.15           # m/s^2
+      limit_lo: 0.0
+      limit_hi: 0.25
+      home_dir: -1

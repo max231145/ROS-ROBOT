@@ -1,0 +1,101 @@
+<?xml version="1.0"?>
+<!--
+  แท็ก <ros2_control> ที่บอกว่าใช้ปลั๊กอินตัวไหน และแต่ละ joint ผูกกับแกนไหนของบอร์ด
+
+  ค่าใน <param> ที่นี่คือแหล่งความจริงแหล่งเดียวของการแปลงหน่วย
+  ต้องตรงกับ DIP switch บน DM556 และอัตราทดจริงของกลไก
+
+    step ต่อ 1 รอบด้านออก = steps_per_rev x microsteps x gear_ratio
+    steps_per_unit        = step ต่อรอบด้านออก / units_per_rev
+    units_per_rev : แกนหมุน  = 6.283185307 (rad ต่อรอบ)
+                    แกนเลื่อน = ระยะ lead ของสกรูหน่วยเมตร เช่น 0.005 = 5 mm/รอบ
+    offset        : ค่า joint ที่ตรงกับจุด home พอดี
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="stepper_system" params="name:=stepper_system port:=/dev/ttyUSB0 baud:=115200 status_hz:=50 stream:=true">
+
+    <ros2_control name="${name}" type="system">
+      <hardware>
+        <plugin>stepper_hardware/StepperSystem</plugin>
+        <param name="port">${port}</param>
+        <param name="baud">${baud}</param>
+        <!-- stream=true : ให้ controller คิด trajectory เอง บอร์ดแค่วิ่งตาม setpoint
+             stream=false: ให้บอร์ด ramp เอง (ใช้ตอนดีบั๊ก ไม่เหมาะกับ trajectory) -->
+        <param name="stream">${stream}</param>
+        <param name="status_hz">${status_hz}</param>
+        <param name="stale_timeout">0.5</param>
+      </hardware>
+
+      <joint name="joint_base">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <param name="axis">0</param>
+        <param name="steps_per_rev">200</param>
+        <param name="microsteps">8</param>
+        <param name="gear_ratio">10.0</param>
+        <param name="units_per_rev">6.283185307</param>
+        <param name="invert">false</param>
+        <param name="offset">-1.5707963</param>
+        <param name="max_vel">1.5</param>
+        <param name="max_accel">3.0</param>
+        <param name="limit_lo">-1.5707963</param>
+        <param name="limit_hi">1.5707963</param>
+      </joint>
+
+      <joint name="joint_shoulder">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <param name="axis">1</param>
+        <param name="steps_per_rev">200</param>
+        <param name="microsteps">8</param>
+        <param name="gear_ratio">20.0</param>
+        <param name="units_per_rev">6.283185307</param>
+        <param name="invert">false</param>
+        <param name="offset">0.0</param>
+        <param name="max_vel">1.0</param>
+        <param name="max_accel">2.0</param>
+        <param name="limit_lo">0.0</param>
+        <param name="limit_hi">2.0</param>
+      </joint>
+
+      <joint name="joint_elbow">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <param name="axis">2</param>
+        <param name="steps_per_rev">200</param>
+        <param name="microsteps">8</param>
+        <param name="gear_ratio">20.0</param>
+        <param name="units_per_rev">6.283185307</param>
+        <param name="invert">true</param>
+        <param name="offset">0.0</param>
+        <param name="max_vel">1.0</param>
+        <param name="max_accel">2.0</param>
+        <param name="limit_lo">-2.0</param>
+        <param name="limit_hi">0.0</param>
+      </joint>
+
+      <!-- แกนเลื่อนด้วยสกรู lead 5 mm: units_per_rev เป็นเมตร ค่าอื่นคิดเป็นเมตรหมด -->
+      <joint name="joint_lift">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <param name="axis">3</param>
+        <param name="steps_per_rev">200</param>
+        <param name="microsteps">8</param>
+        <param name="gear_ratio">1.0</param>
+        <param name="units_per_rev">0.005</param>
+        <param name="invert">false</param>
+        <param name="offset">0.0</param>
+        <param name="max_vel">0.03</param>
+        <param name="max_accel">0.15</param>
+        <param name="limit_lo">0.0</param>
+        <param name="limit_hi">0.25</param>
+      </joint>
+    </ros2_control>
+
+  </xacro:macro>
+</robot>

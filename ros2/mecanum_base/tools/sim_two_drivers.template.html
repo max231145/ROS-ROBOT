@@ -1,0 +1,258 @@
+<title>จำลองต่อ DM556 สองตัว</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#EDF1EF;--panel:#FFFFFF;--ink:#14201B;--mute:#586962;--rule:#D2DBD6;--grid:#E3E9E6;
+  --sel:#1E5A86;--sel-soft:#E1ECF4;--ok:#1C7A50;--ok-soft:#E0F1E8;--warn:#8F6410;--warn-soft:#F6ECD6;
+  --bad:#B3372B;--bad-soft:#F7E3E0;--ghost:#6655CC;--fwd:#1C7A50;--rev:#B3372B;
+  --display:"Chakra Petch","IBM Plex Sans Thai",system-ui,sans-serif;
+  --body:"IBM Plex Sans Thai","Noto Sans Thai",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E1411;--panel:#161E1A;--ink:#E2E9E5;--mute:#92A29A;--rule:#2A3630;--grid:#1D2722;
+  --sel:#86BCE4;--sel-soft:#1A2B38;--ok:#55C18F;--ok-soft:#15291F;--warn:#E2B659;--warn-soft:#2E2614;
+  --bad:#F2796A;--bad-soft:#351C19;--ghost:#A99DFF;--fwd:#55C18F;--rev:#F2796A}}
+:root[data-theme="dark"]{
+  --ground:#0E1411;--panel:#161E1A;--ink:#E2E9E5;--mute:#92A29A;--rule:#2A3630;--grid:#1D2722;
+  --sel:#86BCE4;--sel-soft:#1A2B38;--ok:#55C18F;--ok-soft:#15291F;--warn:#E2B659;--warn-soft:#2E2614;
+  --bad:#F2796A;--bad-soft:#351C19;--ghost:#A99DFF;--fwd:#55C18F;--rev:#F2796A}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:15px/1.6 var(--body);margin:0;padding-inline:16px}
+main{max-width:1120px;margin:0 auto;padding-block:28px 56px;display:grid;gap:28px}
+h1,h2,h3{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:clamp(24px,4vw,34px);line-height:1.2}
+h2{font-size:19px}
+.eyebrow{font:500 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.lede{color:var(--mute);max-width:65ch;margin:8px 0 0}
+code,.mono{font-family:var(--mono);font-size:.9em}
+
+/* แถบผังสาย */
+.wiring{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.drv{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:grid;gap:6px;align-content:start}
+.drv h3{font-size:15px}
+.pins{display:flex;flex-wrap:wrap;gap:6px}
+.pin{font:500 12px/1 var(--mono);border:1px solid var(--rule);border-radius:3px;padding:5px 7px;color:var(--ink)}
+.pin b{font-weight:500;color:var(--mute);margin-right:4px}
+.drv p{margin:0;font-size:13px;color:var(--mute)}
+
+/* ส่วนจำลอง */
+.sim{display:grid;gap:18px;align-items:start}
+@media (min-width:880px){.sim{grid-template-columns:270px 1fr}}
+.cases{display:grid;gap:14px}
+.group{display:grid;gap:6px}
+.case{all:unset;box-sizing:border-box;cursor:pointer;display:flex;gap:10px;align-items:center;
+  padding:8px 10px;border-radius:5px;border:1px solid transparent;font-size:14px;line-height:1.35}
+.case:hover{background:var(--panel)}
+.case:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.case[aria-pressed="true"]{background:var(--sel-soft);border-color:var(--sel)}
+.group-list{display:grid;gap:2px}
+.dot{flex:none;width:9px;height:9px;border-radius:50%}
+@media (max-width:879px){.group-list{display:flex;flex-wrap:wrap;gap:6px}.case{border-color:var(--rule);background:var(--panel)}}
+
+.stage{display:grid;gap:12px;min-width:0}
+.status{border-radius:6px;padding:12px 14px;display:grid;gap:4px;border:1px solid var(--rule);background:var(--panel)}
+.status .verdict{font:600 13px/1.2 var(--display);letter-spacing:.08em;text-transform:uppercase}
+.status .name{font-size:17px;font-weight:600}
+.status .why{color:var(--mute);font-size:14px}
+.status .fix{font-size:14px}
+.status .fix b{font-weight:600}
+.toggle{display:flex;gap:8px;align-items:center;font-size:14px;margin-top:4px;cursor:pointer;width:fit-content}
+.toggle input{accent-color:var(--sel);width:16px;height:16px}
+.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:560px){.panels{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:10px 12px 12px;display:grid;gap:6px;align-content:start}
+.panel header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.panel h3{font-size:15px}
+.tag{font-size:12.5px;font-weight:500;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{color:var(--ok);background:var(--ok-soft)}.tag.bad{color:var(--bad);background:var(--bad-soft)}
+.odomnote{font-size:12.5px;color:var(--ghost)}
+canvas{width:100%;max-width:100%;aspect-ratio:1;display:block}
+.cmd{font:12px/1.5 var(--mono);color:var(--mute);font-variant-numeric:tabular-nums;white-space:pre;overflow-x:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--mute)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:18px;height:0;border-top:2px solid var(--ink)}
+.sw.ghost{border-top:2px dashed var(--ghost)}
+.fwd{color:var(--fwd)}.rev{color:var(--rev)}
+
+/* ตาราง */
+.tw{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th{font:600 12px/1.3 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--mute);text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule)}
+td{padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.sym{font-weight:500;white-space:nowrap}
+.kind{display:inline-block;font-size:12px;padding:1px 7px;border-radius:999px;white-space:nowrap;margin-right:4px}
+.kind.k-ok{color:var(--ok);background:var(--ok-soft)}.kind.k-cfg{color:var(--sel);background:var(--sel-soft)}.kind.k-hw{color:var(--warn);background:var(--warn-soft)}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+.note{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:14px 16px}
+.note h3{font-size:15px;margin-bottom:8px}
+.note ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:14px}
+.note.caution{border-color:var(--warn);background:var(--warn-soft)}
+.note.caution h3{color:var(--warn)}
+section.block{display:grid;gap:12px}
+footer{font-size:13px;color:var(--mute)}
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">ฐานขับ mecanum · ESP32 → DM556 ×2</div>
+    <h1>จำลองต่อ DM556 สองตัว ซ้าย / ขวา</h1>
+    <p class="lede">สั่งหุ่น 4 แบบ ครั้งละ 3 วินาที แล้วดูว่าหุ่นจริงไปทางไหน เทียบกับที่ odom ของ node คิดว่าไป คำนวณด้วย <code>kinematics.py</code> ตัวเดียวกับที่รันบน Pi · ล้อ r 0.0661 m · ฐานล้อ 0.42 m · ระยะซ้าย-ขวา 0.54 m</p>
+  </header>
+
+  <section class="wiring" aria-label="ผังต่อสาย">
+    <div class="drv">
+      <h3>ไดรเวอร์ซ้าย ← ช่อง 0</h3>
+      <div class="pins"><span class="pin"><b>PUL</b>GPIO 25</span><span class="pin"><b>DIR</b>GPIO 26</span><span class="pin"><b>ENA</b>GPIO 23</span></div>
+      <p>มอเตอร์หน้าซ้าย + หลังซ้าย ต่อขนาน</p>
+    </div>
+    <div class="drv">
+      <h3>ไดรเวอร์ขวา ← ช่อง 1</h3>
+      <div class="pins"><span class="pin"><b>PUL</b>GPIO 27</span><span class="pin"><b>DIR</b>GPIO 14</span><span class="pin"><b>ENA</b>GPIO 23</span></div>
+      <p>มอเตอร์หน้าขวา + หลังขวา ต่อขนาน</p>
+    </div>
+    <div class="drv">
+      <h3>ช่อง 2 · 3 ปล่อยว่าง</h3>
+      <div class="pins"><span class="pin"><b>2</b>GPIO 32/33</span><span class="pin"><b>3</b>GPIO 18/19</span></div>
+      <p>เฟิร์มแวร์ยังนับ step ช่องนี้ odom จึงคิดครบ 4 ล้อ ไม่ต้องแฟลชใหม่</p>
+    </div>
+  </section>
+
+  <section class="sim" aria-label="ตัวจำลอง">
+    <nav class="cases" id="cases" aria-label="เลือกกรณีต่อสาย"></nav>
+    <div class="stage">
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="panels" id="panels"></div>
+      <div class="legend">
+        <span><i class="sw"></i>หุ่นจริง</span>
+        <span><i class="sw ghost"></i>odom ที่ node คิด (node ไม่รู้ว่าสายต่อผิด)</span>
+        <span class="fwd">▲ ล้อหมุนพาไปหน้า</span>
+        <span class="rev">▼ ล้อหมุนถอย</span>
+        <span>ตาราง 20 cm</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>ดูอาการแล้วรู้สาเหตุ</h2>
+    <div class="tw"><table id="sym"></table></div>
+  </section>
+
+  <section class="notes">
+    <div class="note">
+      <h3>แก้ config วันต่อจริง</h3>
+      <ul>
+        <li><code>max_wz: 0.0</code> → <code>0.5</code> ก่อน นิ่งแล้วค่อย <code>1.0</code></li>
+        <li><code>max_vy: 0.0</code> คงไว้ สั่งเดินข้างกับไดรเวอร์ 2 ตัว หุ่นจะหมุนตัวแทน (wz +0.21)</li>
+        <li><code>invert_wheels</code> ตามผลเทสยกล้อลอย ดูตารางด้านบน</li>
+        <li><code>track_width</code> ปรับหลังเทสหมุน 360° บนพื้น</li>
+      </ul>
+    </div>
+    <div class="note caution">
+      <h3>ระวังกระแสมอเตอร์</h3>
+      <ul>
+        <li>เดิมไดรเวอร์ 1 ตัวจ่ายมอเตอร์ 4 ตัว ตอนนี้ 2 ตัว ที่ DIP เดิมมอเตอร์แต่ละตัวได้กระแส ~2 เท่า</li>
+        <li>อย่าเพิ่มกระแส วิ่ง 5 นาทีแล้วจับมอเตอร์ ถ้าร้อนจนจับไม่ได้ให้ลดลง</li>
+        <li>DIP microstep สองไดรเวอร์ต้องตรงกัน (1600)</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>สร้างจาก <code>tools/sim_two_drivers.py --html</code> · เทสยกล้อลอยทีละข้างด้วย <code>tools/side_test.py</code></footer>
+</main>
+
+<script>
+const D=/*DATA*/null;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let cur=0,useFix=false,t0=performance.now();
+const tok=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const kindOf=k=>k.ok?'ok':(k.fix_by_config?'cfg':'hw');
+const KIND={ok:['ต่อถูก','--ok'],cfg:['แก้ใน config ได้','--sel'],hw:['ต้องแก้ที่สาย / DIP','--warn']};
+
+function buildCases(){
+  const nav=document.getElementById('cases');nav.innerHTML='';
+  ['ok','cfg','hw'].forEach(kind=>{
+    const g=document.createElement('div');g.className='group';
+    g.innerHTML=`<div class="eyebrow">${KIND[kind][0]}</div><div class="group-list"></div>`;
+    const list=g.lastElementChild;
+    D.cases.forEach((k,i)=>{if(kindOf(k)!==kind)return;
+      const b=document.createElement('button');b.className='case';b.id='case-'+k.key;
+      b.innerHTML=`<span class="dot" style="background:var(${KIND[kind][1]})"></span>${k.name}`;
+      b.onclick=()=>{cur=i;useFix=false;render()};list.appendChild(b)});
+    nav.appendChild(g)});
+}
+function runs(){const k=D.cases[cur];return useFix&&k.fixed_runs?k.fixed_runs:k.runs}
+function render(){
+  document.querySelectorAll('.case').forEach(b=>b.setAttribute('aria-pressed',String(b.id==='case-'+D.cases[cur].key)));
+  const k=D.cases[cur];t0=performance.now();
+  const rs=runs(),pass=rs.every((r,i)=>r.result===D.commands[i][3]);
+  const col=pass?'--ok':'--bad';
+  const st=document.getElementById('status');
+  st.style.borderColor=`var(${col})`;
+  st.innerHTML=`<span class="verdict" style="color:var(${col})">${pass?'ผ่านครบ 4 คำสั่ง':'ไม่ผ่าน'}${useFix?' · หลังแก้ config':''}</span>
+    <span class="name">${k.name}</span><span class="why">${k.why}</span>
+    <span class="fix">วิธีแก้: <b>${k.fix}</b></span>`+
+    (k.fixed_runs?`<label class="toggle" for="fix-toggle"><input type="checkbox" id="fix-toggle" ${useFix?'checked':''}> ดูผลหลังแก้ config</label>`:'');
+  const tg=document.getElementById('fix-toggle');if(tg)tg.onchange=()=>{useFix=tg.checked;render()};
+  const p=document.getElementById('panels');p.innerHTML='';
+  const pad=a=>a.map(v=>String(v).padStart(5)).join(' ');
+  rs.forEach((r,i)=>{const [name,,,exp]=D.commands[i],ok=r.result===exp,lie=r.odom_result!==r.result;
+    p.insertAdjacentHTML('beforeend',`<article class="panel">
+      <header><h3>สั่ง${name}</h3><span class="tag ${ok?'ok':'bad'}">หุ่นจริง: ${D.labels[r.result]}</span></header>
+      ${lie?`<div class="odomnote">odom บอกว่า${D.labels[r.odom_result]} — ดู odom อย่างเดียวจะไม่รู้ว่าผิด</div>`:''}
+      <canvas id="cv${i}" width="460" height="460" role="img" aria-label="สั่ง${name} หุ่นจริง${D.labels[r.result]}"></canvas>
+      <div class="cmd">V        ${pad(r.rates)}\nล้อจริง  ${pad(r.wheels)}\n         ${pad(['FL','FR','RL','RR'])}</div>
+    </article>`)});
+  draw(performance.now());
+}
+
+const S=300,CX=230,CY=250;           // px ต่อเมตร, จุดเริ่มกลางภาพ
+function robot(x,pose,wheels,col,dash){
+  const [L,W]=D.geom,[px,py,th]=pose,hw=W/2*S,hl=L/2*S;
+  x.save();x.translate(CX-py*S,CY-px*S);x.rotate(-th);
+  x.strokeStyle=col;x.lineWidth=2;x.setLineDash(dash?[7,5]:[]);
+  x.strokeRect(-hw+14,-hl-18,2*hw-28,2*hl+36);
+  x.beginPath();x.moveTo(0,-hl-30);x.lineTo(-9,-hl-12);x.lineTo(9,-hl-12);x.closePath();
+  if(dash)x.stroke();else{x.fillStyle=col;x.fill()}
+  if(wheels){x.setLineDash([]);
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sy],i)=>{
+      const wx=sx*hw,wy=sy*hl,w=wheels[i];
+      x.fillStyle=col;x.fillRect(wx-7,wy-19,14,38);
+      if(!w)return;
+      const c=tok(w>0?'--fwd':'--rev'),d=w>0?-1:1,ax=wx+sx*22;
+      x.strokeStyle=c;x.fillStyle=c;x.lineWidth=3;
+      x.beginPath();x.moveTo(ax,wy-d*12);x.lineTo(ax,wy+d*10);x.stroke();
+      x.beginPath();x.moveTo(ax,wy+d*20);x.lineTo(ax-6,wy+d*8);x.lineTo(ax+6,wy+d*8);x.closePath();x.fill()})}
+  x.restore()}
+function trail(x,p,n,col,dash){
+  x.save();x.strokeStyle=col;x.lineWidth=2;x.setLineDash(dash?[7,5]:[]);x.beginPath();
+  p.slice(0,n+1).forEach((q,j)=>{const X=CX-q[1]*S,Y=CY-q[0]*S;j?x.lineTo(X,Y):x.moveTo(X,Y)});
+  x.stroke();x.restore()}
+function draw(now){
+  const rs=runs(),len=rs[0].path.length;
+  const n=reduce?len-1:Math.min(len-1,Math.floor((now-t0)/1000/D.dt)%(len+20));
+  const grid=tok('--grid'),ink=tok('--ink'),ghost=tok('--ghost');
+  rs.forEach((r,i)=>{const cv=document.getElementById('cv'+i);if(!cv)return;const x=cv.getContext('2d');
+    x.clearRect(0,0,460,460);x.strokeStyle=grid;x.lineWidth=1;x.setLineDash([]);
+    for(let g=-8;g<=8;g++){const o=g*0.2*S;
+      x.beginPath();x.moveTo(CX+o,0);x.lineTo(CX+o,460);x.stroke();
+      x.beginPath();x.moveTo(0,CY+o);x.lineTo(460,CY+o);x.stroke()}
+    trail(x,r.odom_path,n,ghost,true);
+    if(r.odom_result!==r.result)robot(x,r.odom_path[n],null,ghost,true);
+    trail(x,r.path,n,ink,false);
+    robot(x,r.path[n],r.wheels,ink,false)});
+}
+function loop(now){requestAnimationFrame(loop);if(!reduce)draw(now)}
+
+document.getElementById('sym').innerHTML=
+  `<thead><tr><th>สั่งเดินหน้า แล้วเห็น</th><th>สั่งหมุนซ้าย แล้วเห็น</th><th>สาเหตุ</th><th>แก้</th></tr></thead><tbody>`+
+  D.cases.map(k=>`<tr><td class="sym">${D.labels[k.runs[0].result]}</td><td class="sym">${D.labels[k.runs[2].result]}</td>
+    <td>${k.name}</td><td><span class="kind k-${kindOf(k)}">${KIND[kindOf(k)][0]}</span>${k.fix}</td></tr>`).join('')+'</tbody>';
+
+buildCases();render();requestAnimationFrame(loop);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw(performance.now()));
+</script>

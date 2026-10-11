@@ -1,0 +1,82 @@
+slam_toolbox:
+  ros__parameters:
+    # ---- ต้องตรงกับหุ่นจริง ----
+    use_sim_time: false          # หุ่นจริง ไม่มี /clock เด็ดขาดห้ามเป็น true
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link        # EKF (robot_localization) publish odom -> base_link (ไม่ใช่ base_footprint)
+    scan_topic: /scan_fixed
+    mode: mapping
+    # 2026-09-24 โหลดแมพห้องที่เซฟไว้ตอนเปิด (save_room.sh) หุ่นต้องจอดตรง map_start_pose (ตำแหน่งตอนเซฟ)
+    # การสั่ง deserialize ระหว่างรันทำ SLAM/EKF ค้าง -- ใช้วิธีนี้แทน · ไม่อยากโหลด ลบ 2 บรรทัดนี้
+    # 6 ต.ค. ผู้ใช้: สำรวจที่ใหม่ เริ่มแมพใหม่ (ห้องเดิมเก็บไว้ที่ room_main -- เอา # ออก 2 บรรทัดล่างเพื่อกลับไปใช้)
+    map_file_name: /home/udru/maps/room_2
+    map_start_pose: [5.510, -10.675, 1.4893]
+
+    # ---- solver ----
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ---- จูนให้เข้ากับ YDLidar 5.7 Hz ----
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02
+    map_update_interval: 1.0
+    resolution: 0.05
+    min_laser_range: 0.35        # ตรงกับ range_min ของ ydlidar.yaml (เดิม 0.12 ขยับเพราะ lidar เห็นตัวหุ่น 2026-09-15)
+    max_laser_range: 4.0         # เดิม 8.0 -- ลำแสงยาวลอดช่องประตู/ใต้โต๊ะทำแมพเป็นรูปดาว อ่านยาก (2026-09-23)
+    minimum_time_interval: 0.1   # ต้อง < คาบของ scan (1/5.7 = 0.175s) ไม่งั้นถูกทิ้งครึ่งนึง
+    transform_timeout: 0.5       # default 0.2 ตึงไปสำหรับ Pi
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+    enable_interactive_mode: true
+
+    # ---- scan matching ----
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.2   # ห้ามตั้ง 0.0 เด็ดขาด จะทำ scan matching ทุกเฟรมแม้หุ่นนิ่ง
+                                   # slam_toolbox กิน CPU 89% และ pose graph โตไม่หยุด (RAM 52->417 MB)
+    minimum_travel_heading: 0.2
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+    link_match_minimum_response_fine: 0.1
+    link_scan_maximum_distance: 1.5
+    loop_search_maximum_distance: 3.0
+    do_loop_closing: true
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+
+    # ---- correlation ----
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+
+    # ---- loop closure ----
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # ---- scan matcher ----
+    # ให้เชื่อ odometry (EKF ล้อ+rf2o) มากขึ้น (2026-09-15) เดิม 0.5 / 1.0 / min angle 0.9
+    # Karto: response *= max(1 - 0.2*ระยะห่างจาก odom^2 / penalty^2, minimum)  (slam_toolbox ยกกำลังสองค่านี้ก่อนใช้)
+    #   ค่า "มาก" = ลงโทษน้อย = เชื่อ scan  ค่า "น้อย" = ลงโทษมาก = เชื่อ odom   ใช้กับ scan matching ต่อเนื่องเท่านั้น
+    #   loop closure เรียก MatchScan แบบ doPenalize=false ไม่โดนผล
+    # ระยะห่าง 2 / 3.5 / 5 / 8 cm : เดิม 1.00 0.999 0.998 0.995  ->  ใหม่ 0.97 0.90 0.80 0.50
+    # มุมห่าง   1 / 2 / 3 / 5 deg  : เดิม 1.00 1.00 0.999 0.998   ->  ใหม่ 0.98 0.90 0.78 0.70
+    # เหตุผล: วิ่ง 1 m ในที่ทดสอบ EKF คลาด ~0% yaw 0.03° แต่ SLAM ลากไป 0.72 m ซ้าย 178 mm yaw 2°
+    #   EKF คลาดแค่ไม่กี่ mm ต่อช่วง minimum_travel_distance 0.2 m จึงลงโทษแรงเกิน ~2 cm ได้
+    #   minimum 0.5 / 0.7 ยังเปิดทางให้ scan ที่ตรงกันชัด ๆ แก้ตำแหน่งไกลได้ (ต้องได้ response มากกว่า 1.4-2 เท่า)
+    distance_variance_penalty: 0.05
+    angle_variance_penalty: 0.05
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.7
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true

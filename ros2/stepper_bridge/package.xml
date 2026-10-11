@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>stepper_bridge</name>
+  <version>0.1.0</version>
+  <description>สะพาน ROS 2 กับบอร์ด ESP32 ที่ขับสเต็ปปิงมอเตอร์ 4 แกนผ่านไดรเวอร์ DM556</description>
+  <maintainer email="chaiphop231102@gmail.com">chaiphop</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,40 @@
+<!--
+  nav_to_pose_safe : ดัดแปลงจาก navigate_to_pose_w_replanning_and_recovery.xml ของ nav2_bt_navigator
+
+  ต่างจากตัวมาตรฐาน:
+    * ตัด Spin ออกจากการกู้คืน : หุ่นหมุนไม่รอบกลาง กวาดข้างได้ ~30 cm ที่ระบบไม่เห็น
+    * BackUp เหลือ 15 cm ช้า 5 cm/s (มาตรฐาน 30 cm) และถอยก่อนล้าง costmap เพื่อให้เช็คการชนกับ
+      สิ่งกีดขวางที่เคยเห็นได้ (ด้านหลังมีเงาที่ตัวหุ่นบัง lidar) ถ้าถอยไม่ได้ก็ข้ามไปล้าง costmap/รอต่อ
+      (2026-09-23 เปิดกลับหลัง /scan_nav เห็นใกล้ถึง 0.12 m; เดิมตัดทิ้งเพราะบอด ~10 cm รอบตัวหุ่น)
+    * ลองใหม่ 2 ครั้งแทน 6 : ไปไม่ได้ก็ยอมแพ้เร็ว ๆ ดีกว่าวนอยู่นาน
+  ยังวางเส้นทางใหม่ทุก 1 วินาทีเหมือนเดิม
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="2" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath" error_code_id="{follow_path_error_code}"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <Sequence name="RecoveryActions">
+          <ForceSuccess>
+            <BackUp backup_dist="0.15" backup_speed="0.05" time_allowance="8.0" error_code_id="{backup_error_code}"/>
+          </ForceSuccess>
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          <Wait wait_duration="3.0"/>
+        </Sequence>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
